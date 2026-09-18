@@ -1,3 +1,16 @@
+// Map de correos y sus roles autorizados
+const ROLES_POR_CORREO = {
+    "oscarflorez64@gmail.com": "contador",        // Tu correo (Contador - Permisos totales)
+    "centrointegraldiversamente9@gmail.com": "administrador",
+    "juliandmc04@gmail.com": "administrador",     // Correo del Administrador
+    "yulianagh0520@gmail.com": "usuario",         // Correo del Usuario Estándar
+    "mafe919@hotmail.com": "usuario",
+    "daira.fono@gmail.com": "usuario"
+
+};
+
+let usuarioRol = 'usuario'; // Rol por defecto
+
 // ==========================================
 // CONEXIÓN CON SUPABASE & LÓGICA DE NEGOCIO
 // ==========================================
@@ -69,13 +82,44 @@ async function verificarSesion() {
 
     if (session) {
         document.getElementById('modal-login').classList.add('hidden');
-        document.getElementById('badge-rol').textContent = `Conectado: ${session.user.email}`;
-        document.getElementById('badge-rol').className = "text-xs px-2.5 py-1 rounded-full bg-cyan-700 text-white font-semibold";
+        
+        const correo = session.user.email;
+
+        // 1. Asignar el rol según el correo autenticado
+        usuarioRol = ROLES_POR_CORREO[correo] || 'usuario';
+
+        // 2. Actualizar la etiqueta (badge) de rol en la interfaz
+        const badge = document.getElementById('badge-rol');
+        if (badge) {
+            badge.textContent = `${correo} (${usuarioRol.toUpperCase()})`;
+            
+            if (usuarioRol === 'contador') {
+                badge.className = "text-xs px-2.5 py-1 rounded-full bg-emerald-700 text-white font-semibold";
+            } else if (usuarioRol === 'administrador') {
+                badge.className = "text-xs px-2.5 py-1 rounded-full bg-indigo-700 text-white font-semibold";
+            } else {
+                badge.className = "text-xs px-2.5 py-1 rounded-full bg-slate-600 text-white font-semibold";
+            }
+        }
+
+        // 3. Controlar visibilidad del formulario (Solo 'contador' y 'administrador' pueden registrar)
+        const formContenedor = document.getElementById('seccion-formulario');
+        if (formContenedor) {
+            if (usuarioRol === 'contador' || usuarioRol === 'administrador') {
+                formContenedor.style.display = 'block';
+            } else {
+                formContenedor.style.display = 'none'; // El usuario estándar no ve el formulario
+            }
+        }
+
         await cargarDesdeSupabase();
     } else {
         document.getElementById('modal-login').classList.remove('hidden');
-        document.getElementById('badge-rol').textContent = "Desconectado";
-        document.getElementById('badge-rol').className = "text-xs px-2.5 py-1 rounded-full bg-amber-500 text-white font-semibold";
+        const badge = document.getElementById('badge-rol');
+        if (badge) {
+            badge.textContent = "Desconectado";
+            badge.className = "text-xs px-2.5 py-1 rounded-full bg-amber-500 text-white font-semibold";
+        }
     }
 }
 
@@ -168,23 +212,38 @@ document.getElementById('form-movimiento').addEventListener('submit', async (e) 
 });
 
 async function eliminarMovimiento(id) {
-    if (!dbSupabase) return;
-    if (!confirm("¿Deseas eliminar este registro contable de la base de datos?")) return;
+    if (!dbSupabase) {
+        console.error("Conexión a Supabase no inicializada.");
+        return;
+    }
 
-    const { error } = await dbSupabase
-        .from('transacciones')
-        .delete()
-        .eq('id', id);
+    // Aseguramos la confirmación del usuario
+    const respuesta = window.confirm("¿Deseas eliminar este registro contable de la base de datos?");
+    if (!respuesta) return;
 
-    if (error) {
-        alert("Error al eliminar: " + error.message);
-    } else {
-        await cargarDesdeSupabase();
+    try {
+        const { error } = await dbSupabase
+            .from('transacciones')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        // Recargar datos en la interfaz tras eliminar exitosamente
+        if (typeof cargarDesdeSupabase === 'function') {
+            await cargarDesdeSupabase();
+        }
+        
+    } catch (err) {
+        console.error("Error al eliminar el movimiento:", err);
+        alert("No se pudo eliminar el registro: " + (err.message || err));
     }
 }
 
 function renderizarTablaYTotales() {
     const cuerpoTabla = document.getElementById('tabla-cuerpo');
+    if (!cuerpoTabla) return;
+    
     cuerpoTabla.innerHTML = '';
 
     let ingresos = 0;
@@ -198,9 +257,16 @@ function renderizarTablaYTotales() {
         const fila = document.createElement('tr');
         fila.className = "hover:bg-slate-50 transition";
 
-        const btnPDF = m.tipo === 'ingreso' 
+        // PERMISO 1: Descargar Recibos PDF (Contador y Administrador)
+        const puedeDescargarPDF = (usuarioRol === 'contador' || usuarioRol === 'administrador') && m.tipo === 'ingreso';
+        const btnPDF = puedeDescargarPDF
             ? `<button onclick='descargarFacturaPDF(${JSON.stringify(m)})' class="text-cyan-700 hover:text-cyan-900 font-bold text-xs bg-cyan-50 px-2 py-1 rounded">PDF</button>` 
             : '';
+
+        // PERMISO 2: Eliminar Transacciones (Exclusivo para Contador)
+        const btnEliminar = (usuarioRol === 'contador')
+            ? `<button onclick="eliminarMovimiento(${m.id})" class="text-rose-600 hover:text-rose-800 font-bold text-xs">Eliminar</button>`
+            : '<span class="text-xs text-slate-300">N/A</span>';
 
         fila.innerHTML = `
             <td class="p-3 text-xs text-slate-500">${m.fecha}</td>
@@ -216,7 +282,7 @@ function renderizarTablaYTotales() {
             <td class="p-3 text-center">
                 <div class="flex items-center justify-center gap-2">
                     ${btnPDF}
-                    <button onclick="eliminarMovimiento(${m.id})" class="text-rose-600 hover:text-rose-800 font-bold text-xs">Eliminar</button>
+                    ${btnEliminar}
                 </div>
             </td>
         `;
