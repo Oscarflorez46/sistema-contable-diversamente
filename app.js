@@ -2,25 +2,27 @@
 // CONEXIÓN CON SUPABASE & LÓGICA DE NEGOCIO
 // ==========================================
 
-const supabase = supabase.createClient(CONFIGURACION.supabaseUrl, CONFIGURACION.supabaseAnonKey);
+// Inicialización corregida de la librería Supabase
+const supabaseClient = window.supabase.createClient(CONFIGURACION.supabaseUrl, CONFIGURACION.supabaseAnonKey);
 
 let movimientosGlobales = []; // Todo el histórico cargado desde la nube
 let movimientosFiltrados = []; // Movimientos filtrados según el rango activo (Día/Mes/Todos)
 
 document.addEventListener('DOMContentLoaded', async () => {
     aplicarConfiguraciones();
-    verificarSesion();
+    await verificarSesion();
 
     document.getElementById('form-login').addEventListener('submit', async (e) => {
         e.preventDefault();
-        const email = document.getElementById('login-email').value;
-        const password = document.getElementById('login-password').value;
+        const email = document.getElementById('login-email').value.trim();
+        const password = document.getElementById('login-password').value.trim();
 
-        const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+        
         if (error) {
-            alert("Error de autenticación: " + error.message);
+            alert("Error al iniciar sesión: " + error.message);
         } else {
-            verificarSesion();
+            await verificarSesion();
         }
     });
 });
@@ -39,7 +41,7 @@ function aplicarConfiguraciones() {
 }
 
 async function verificarSesion() {
-    const { data: { session } } = await supabase.auth.getSession();
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
 
     if (session) {
         document.getElementById('modal-login').classList.add('hidden');
@@ -54,13 +56,13 @@ async function verificarSesion() {
 }
 
 async function cerrarSesion() {
-    await supabase.auth.signOut();
+    await supabaseClient.auth.signOut();
     location.reload();
 }
 
 // Cargar registros desde la base de datos de Supabase
 async function cargarDesdeSupabase() {
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('transacciones')
         .select('*')
         .order('created_at', { ascending: false });
@@ -120,7 +122,7 @@ document.getElementById('form-movimiento').addEventListener('submit', async (e) 
         descripcion: document.getElementById('campo-descripcion').value
     };
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseClient
         .from('transacciones')
         .insert([nuevoRegistro])
         .select();
@@ -145,7 +147,7 @@ document.getElementById('form-movimiento').addEventListener('submit', async (e) 
 async function eliminarMovimiento(id) {
     if (!confirm("¿Deseas eliminar este registro contable de la base de datos?")) return;
 
-    const { error } = await supabase
+    const { error } = await supabaseClient
         .from('transacciones')
         .delete()
         .eq('id', id);
