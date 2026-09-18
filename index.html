@@ -8,8 +8,8 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Librería jsPDF oficial -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <!-- SDK Oficial de Supabase -->
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SDK Oficial de Supabase v2 (JS Bundle independiente) -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 </head>
 <body class="bg-slate-100 text-slate-800 font-sans min-h-screen pb-10">
 
@@ -29,7 +29,7 @@
                     <label class="block text-xs font-medium text-slate-600 mb-1">Contraseña</label>
                     <input type="password" id="login-password" required class="w-full border rounded-lg p-2 text-sm focus:ring-2 focus:ring-cyan-500">
                 </div>
-                <button type="submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2 px-4 rounded-xl shadow transition text-sm">
+                <button type="submit" id="btn-login-submit" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-2 px-4 rounded-xl shadow transition text-sm">
                     Iniciar Sesión
                 </button>
             </form>

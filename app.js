@@ -2,27 +2,49 @@
 // CONEXIÓN CON SUPABASE & LÓGICA DE NEGOCIO
 // ==========================================
 
-// Inicialización corregida de la librería Supabase
-const supabaseClient = window.supabase.createClient(CONFIGURACION.supabaseUrl, CONFIGURACION.supabaseAnonKey);
-
-let movimientosGlobales = []; // Todo el histórico cargado desde la nube
-let movimientosFiltrados = []; // Movimientos filtrados según el rango activo (Día/Mes/Todos)
+let dbSupabase = null;
+let movimientosGlobales = [];
+let movimientosFiltrados = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     aplicarConfiguraciones();
-    await verificarSesion();
+
+    // Inicialización con validación de seguridad
+    if (window.supabase && window.supabase.createClient) {
+        dbSupabase = window.supabase.createClient(CONFIGURACION.supabaseUrl, CONFIGURACION.supabaseAnonKey);
+        await verificarSesion();
+    } else {
+        alert("Error de conexión: No se pudo cargar la librería de Supabase. Revisa tu conexión a internet.");
+    }
 
     document.getElementById('form-login').addEventListener('submit', async (e) => {
         e.preventDefault();
+        
+        if (!dbSupabase) {
+            alert("El servicio de base de datos no está listo.");
+            return;
+        }
+
         const email = document.getElementById('login-email').value.trim();
         const password = document.getElementById('login-password').value.trim();
+        const btnSubmit = document.getElementById('btn-login-submit');
 
-        const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
-        
-        if (error) {
-            alert("Error al iniciar sesión: " + error.message);
-        } else {
-            await verificarSesion();
+        btnSubmit.disabled = true;
+        btnSubmit.textContent = "Verificando...";
+
+        try {
+            const { data, error } = await dbSupabase.auth.signInWithPassword({ email, password });
+
+            if (error) {
+                alert("Error de autenticación: " + error.message);
+            } else {
+                await verificarSesion();
+            }
+        } catch (err) {
+            alert("Error al intentar iniciar sesión: " + err.message);
+        } finally {
+            btnSubmit.disabled = false;
+            btnSubmit.textContent = "Iniciar Sesión";
         }
     });
 });
@@ -41,7 +63,9 @@ function aplicarConfiguraciones() {
 }
 
 async function verificarSesion() {
-    const { data: { session }, error } = await supabaseClient.auth.getSession();
+    if (!dbSupabase) return;
+
+    const { data: { session } } = await dbSupabase.auth.getSession();
 
     if (session) {
         document.getElementById('modal-login').classList.add('hidden');
@@ -56,13 +80,14 @@ async function verificarSesion() {
 }
 
 async function cerrarSesion() {
-    await supabaseClient.auth.signOut();
+    if (dbSupabase) await dbSupabase.auth.signOut();
     location.reload();
 }
 
-// Cargar registros desde la base de datos de Supabase
 async function cargarDesdeSupabase() {
-    const { data, error } = await supabaseClient
+    if (!dbSupabase) return;
+
+    const { data, error } = await dbSupabase
         .from('transacciones')
         .select('*')
         .order('created_at', { ascending: false });
@@ -73,14 +98,13 @@ async function cargarDesdeSupabase() {
     }
 
     movimientosGlobales = data || [];
-    cambiarFiltroFecha(); // Aplica el filtro por defecto (Día de hoy)
+    cambiarFiltroFecha();
 }
 
-// Filtra los movimientos
 function cambiarFiltroFecha() {
     const opcion = document.getElementById('filtro-rango').value;
     const hoyStr = new Date().toISOString().split('T')[0];
-    const mesActualStr = hoyStr.substring(0, 7); // AAAA-MM
+    const mesActualStr = hoyStr.substring(0, 7);
 
     if (opcion === 'hoy') {
         movimientosFiltrados = movimientosGlobales.filter(m => m.fecha === hoyStr);
@@ -93,7 +117,6 @@ function cambiarFiltroFecha() {
     renderizarTablaYTotales();
 }
 
-// Formateador oficial COP
 function formatearCOP(monto) {
     return new Intl.NumberFormat('es-CO', {
         style: 'currency',
@@ -103,9 +126,10 @@ function formatearCOP(monto) {
     }).format(monto);
 }
 
-// Guardar Registro en la Nube
 document.getElementById('form-movimiento').addEventListener('submit', async (e) => {
     e.preventDefault();
+
+    if (!dbSupabase) return alert("Base de datos no conectada.");
 
     const montoVal = parseFloat(document.getElementById('campo-monto').value.replace(/[$.,]/g, ''));
     if (isNaN(montoVal) || montoVal <= 0) {
@@ -122,7 +146,7 @@ document.getElementById('form-movimiento').addEventListener('submit', async (e) 
         descripcion: document.getElementById('campo-descripcion').value
     };
 
-    const { data, error } = await supabaseClient
+    const { data, error } = await dbSupabase
         .from('transacciones')
         .insert([nuevoRegistro])
         .select();
@@ -143,11 +167,11 @@ document.getElementById('form-movimiento').addEventListener('submit', async (e) 
     }
 });
 
-// Eliminar Registro en la Nube
 async function eliminarMovimiento(id) {
+    if (!dbSupabase) return;
     if (!confirm("¿Deseas eliminar este registro contable de la base de datos?")) return;
 
-    const { error } = await supabaseClient
+    const { error } = await dbSupabase
         .from('transacciones')
         .delete()
         .eq('id', id);
@@ -159,7 +183,6 @@ async function eliminarMovimiento(id) {
     }
 }
 
-// Renderizar Tabla y Métricas
 function renderizarTablaYTotales() {
     const cuerpoTabla = document.getElementById('tabla-cuerpo');
     cuerpoTabla.innerHTML = '';
@@ -205,18 +228,15 @@ function renderizarTablaYTotales() {
     document.getElementById('balance-total').textContent = formatearCOP(ingresos - egresos);
 }
 
-// Descargar Recibo Individual en PDF (Incluye NIT)
 function descargarFacturaPDF(movimiento) {
     if (!window.jspdf || !window.jspdf.jsPDF) return alert("Error cargando librería PDF.");
 
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
 
-    // Franja de encabezado
     doc.setFillColor(183, 226, 225);
     doc.rect(0, 0, 210, 34, 'F');
 
-    // Nombre de la empresa y NIT
     doc.setTextColor(30, 41, 59);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(15);
@@ -227,7 +247,6 @@ function descargarFacturaPDF(movimiento) {
     doc.text(`NIT: ${CONFIGURACION.NIT}`, 14, 22);
     doc.text("COMPROBANTE DE PAGO / RECIBO DE SERVICIO", 14, 28);
 
-    // Número de recibo y fecha
     const numComprobante = movimiento.id.toString().padStart(6, '0');
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
@@ -238,7 +257,6 @@ function descargarFacturaPDF(movimiento) {
     doc.setDrawColor(203, 213, 225);
     doc.line(14, 40, 196, 40);
 
-    // Detalle del Servicio
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.text("Detalle del Servicio Atendido:", 14, 50);
@@ -249,7 +267,6 @@ function descargarFacturaPDF(movimiento) {
     doc.text(`Descripción: ${movimiento.descripcion}`, 14, 66);
     doc.text(`Usuario / Remitente: ${movimiento.entidad}`, 14, 74);
 
-    // Tabla de valor
     doc.setFillColor(241, 245, 249);
     doc.rect(14, 84, 182, 8, 'F');
 
@@ -263,12 +280,10 @@ function descargarFacturaPDF(movimiento) {
 
     doc.line(14, 107, 196, 107);
 
-    // Total
     doc.setFont("helvetica", "bold");
     doc.setFontSize(12);
     doc.text(`TOTAL PAGO: ${formatearCOP(movimiento.monto)}`, 130, 118);
 
-    // Pie de página
     doc.setFontSize(9);
     doc.setFont("helvetica", "italic");
     doc.setTextColor(100, 116, 139);
@@ -277,7 +292,6 @@ function descargarFacturaPDF(movimiento) {
     doc.save(`Recibo_DiversaMente_REC-${numComprobante}.pdf`);
 }
 
-// Exportar Resumen Filtrado en PDF
 function exportarResumenPDF() {
     if (!window.jspdf || !window.jspdf.jsPDF) return alert("Error cargando librería PDF.");
     if (movimientosFiltrados.length === 0) return alert("No hay movimientos en el rango seleccionado.");
