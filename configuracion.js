@@ -1,19 +1,12 @@
-// ==========================================
-// CONFIGURACIÓN DE APARIENCIA Y SEGURIDAD
-// ==========================================
-
 const CONFIGURACION = {
     // Datos de la Empresa
     nombreEmpresa: "Centro Integral DiversaMente",
     NIT: "902.065.245",
-    subtitulo: "Sistema de Control Contable",
-    logoUrl: "logo.png", // Nombre del archivo de tu logo en la misma carpeta
-
-    // Personalización de Colores con tu código exacto #b7e2e1
-    colorPrincipal: "bg-[#b7e2e1]",          // Fondo del banner con tu color #b7e2e1
-    colorTextoPrincipal: "text-slate-800",  // Texto oscuro para alto contraste sobre color pastel
+    subtitulo: "Sistema Contable en la Nube",
+    logoUrl: "logo.png",
+    colorPrincipal: "bg-[#b7e2e1]",
     
-    // CREDENCIALES DE ACCESO (CÁMBIALAS AQUÍ POR TUS PROPIAS CLAVES)
-    claveAdministrador: "Diversamente05$$?", // Permiso total (Crear, Modificar, Borrar)
-    claveUsuarioComun: "Diversamente05$"       // Solo lectura (Ver reportes)
+    // Credenciales de Supabase
+    supabaseUrl: "https://cuhkkaspgmnbafvotgxd.supabase.co",
+    supabaseAnonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImN1aGtrYXNwZ21uYmFmdm90Z3hkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk3MzczNDUsImV4cCI6MjEwNTMxMzM0NX0.24jKbPmmx9fZ8Uw_hdbZ6gWQ_DB614_7Y3hTizDgok8"
 };
